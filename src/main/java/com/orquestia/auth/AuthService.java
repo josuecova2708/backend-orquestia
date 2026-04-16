@@ -3,6 +3,9 @@ package com.orquestia.auth;
 import com.orquestia.auth.dto.AuthResponse;
 import com.orquestia.auth.dto.LoginRequest;
 import com.orquestia.auth.dto.RegisterRequest;
+import com.orquestia.auth.dto.SetupEmpresaRequest;
+import com.orquestia.empresa.Empresa;
+import com.orquestia.empresa.EmpresaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ public class AuthService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final EmpresaRepository empresaRepository;
 
     /**
      * Registra un nuevo usuario.
@@ -79,6 +83,43 @@ public class AuthService {
         // Generar token
         String token = jwtService.generateToken(usuario);
 
+        return buildAuthResponse(usuario, token);
+    }
+
+    /**
+     * Onboarding: crea la empresa del usuario y lo vincula como ADMIN.
+     * Se llama una sola vez después del registro, cuando empresaId == null.
+     * 1. Crea la Empresa con los datos del request
+     * 2. Actualiza el Usuario: asigna empresaId + eleva rol a ADMIN
+     * 3. Genera nuevo token con el estado actualizado
+     * 4. Retorna el AuthResponse fresco (el frontend lo guarda y reemplaza el anterior)
+     */
+    public AuthResponse setupEmpresa(String userId, SetupEmpresaRequest request) {
+        // Buscar el usuario
+        Usuario usuario = usuarioRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        // Verificar que aún no tiene empresa
+        if (usuario.getEmpresaId() != null) {
+            throw new RuntimeException("Este usuario ya tiene una empresa asignada");
+        }
+
+        // Crear la empresa
+        Empresa empresa = Empresa.builder()
+                .nombre(request.getNombre())
+                .descripcion(request.getDescripcion() != null ? request.getDescripcion() : "")
+                .rubro(request.getRubro())
+                .creadoPor(userId)
+                .build();
+        empresa = empresaRepository.save(empresa);
+
+        // Vincular empresa al usuario y subir rol a ADMIN
+        usuario.setEmpresaId(empresa.getId());
+        usuario.setRol(Rol.ADMIN);
+        usuario = usuarioRepository.save(usuario);
+
+        // Generar token nuevo (con el empresaId ahora incluido en los claims)
+        String token = jwtService.generateToken(usuario);
         return buildAuthResponse(usuario, token);
     }
 

@@ -110,13 +110,9 @@ public class ProcesoService {
     }
 
     /**
-     * Elimina un proceso (solo si está en BORRADOR).
+     * Elimina un proceso.
      */
     public void eliminarProceso(String id) {
-        Proceso proceso = obtenerProceso(id);
-        if (!"BORRADOR".equals(proceso.getEstado())) {
-            throw new RuntimeException("Solo se pueden eliminar procesos en estado BORRADOR");
-        }
         procesoRepository.deleteById(id);
     }
 }

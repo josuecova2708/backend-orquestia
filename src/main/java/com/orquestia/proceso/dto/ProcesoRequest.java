@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * DTO para crear/actualizar un proceso.
@@ -22,7 +23,9 @@ public class ProcesoRequest {
     @NotBlank(message = "La empresa es requerida")
     private String empresaId;
 
-    // Estos se envían cuando el diseñador guarda el diagrama
     private List<Nodo> nodos;
     private List<Conexion> conexiones;
+
+    /** departamentoId → userId asignado en este proceso */
+    private Map<String, String> asignaciones;
 }

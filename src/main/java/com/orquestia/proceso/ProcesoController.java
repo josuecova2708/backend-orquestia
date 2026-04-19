@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Controller REST para gestión de Procesos (workflows).
@@ -43,6 +44,22 @@ public class ProcesoController {
             @RequestParam String empresaId,
             @RequestParam(required = false) String estado) {
         return ResponseEntity.ok(procesoService.listarProcesos(empresaId, estado));
+    }
+
+    /** Procesos que puede iniciar el usuario autenticado (según asignaciones) */
+    @GetMapping("/iniciables")
+    public ResponseEntity<List<Proceso>> listarIniciables(
+            @RequestParam String empresaId,
+            Authentication auth) {
+        return ResponseEntity.ok(procesoService.listarIniciables(empresaId, auth.getName()));
+    }
+
+    /** Guarda las asignaciones (departamentoId → userId) de un proceso */
+    @PutMapping("/{id}/asignaciones")
+    public ResponseEntity<Proceso> guardarAsignaciones(
+            @PathVariable String id,
+            @RequestBody Map<String, String> asignaciones) {
+        return ResponseEntity.ok(procesoService.guardarAsignaciones(id, asignaciones));
     }
 
     @GetMapping("/{id}")

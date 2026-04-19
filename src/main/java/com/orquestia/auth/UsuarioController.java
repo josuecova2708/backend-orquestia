@@ -1,28 +1,37 @@
 package com.orquestia.auth;
 
+import com.orquestia.auth.dto.CrearFuncionarioRequest;
 import com.orquestia.auth.dto.UsuarioResponse;
 import com.orquestia.auth.dto.UsuarioUpdateRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Controller REST para gestión administrativa de usuarios.
- *
- * Endpoints:
- *   GET    /api/usuarios              → Listar usuarios (filtro opcional por empresaId)
- *   GET    /api/usuarios/{id}         → Obtener usuario por ID
- *   PUT    /api/usuarios/{id}         → Actualizar usuario (rol, empresa, depto, etc.)
- *   DELETE /api/usuarios/{id}         → Desactivar usuario (soft delete)
- */
 @RestController
 @RequestMapping("/api/usuarios")
 @RequiredArgsConstructor
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
+    private final UsuarioRepository usuarioRepository;
+
+    /**
+     * POST /api/usuarios
+     * El admin crea un funcionario nuevo en su empresa.
+     * Spring extrae empresaId del token JWT del admin autenticado.
+     */
+    @PostMapping
+    public ResponseEntity<UsuarioResponse> crearFuncionario(
+            @RequestBody CrearFuncionarioRequest request,
+            Authentication auth) {
+        // auth.getName() devuelve el userId (puesto por JwtAuthenticationFilter)
+        Usuario admin = usuarioRepository.findById(auth.getName())
+                .orElseThrow(() -> new RuntimeException("Admin no encontrado"));
+        return ResponseEntity.ok(usuarioService.crearFuncionario(admin.getEmpresaId(), request));
+    }
 
     @GetMapping
     public ResponseEntity<List<UsuarioResponse>> listarUsuarios(

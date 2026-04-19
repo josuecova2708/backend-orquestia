@@ -11,7 +11,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Modelo MongoDB para un Proceso (definición de workflow).
@@ -51,6 +53,10 @@ public class Proceso {
 
     @Builder.Default
     private List<Conexion> conexiones = new ArrayList<>();
+
+    /** departamentoId → userId: quién de ese depto ejecuta las tareas en ESTE proceso */
+    @Builder.Default
+    private Map<String, String> asignaciones = new HashMap<>();
 
     @Builder.Default
     private int version = 1;

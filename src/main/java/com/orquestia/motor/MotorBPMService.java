@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Arrays;
 
 /**
  * MotorBPMService — Corazón del sistema de ejecución de procesos.
@@ -225,9 +226,8 @@ public class MotorBPMService {
                 continue;
             }
             Nodo destino = findNodo(proceso, conexion.getDestinoId());
-            crearTarea(instancia, destino);
+            crearTarea(instancia, destino, proceso.getAsignaciones());
 
-            // Si el destino es un AND Join, verificar si podemos avanzar
             if ("GATEWAY_AND".equals(destino.getTipo())) {
                 verificarANDJoin(instancia, proceso, destino);
             }
@@ -288,7 +288,7 @@ public class MotorBPMService {
         if ("RETORNO".equals(conexion.getTipo())) {
             evaluarRetorno(instancia, proceso, conexion, destino);
         } else {
-            crearTarea(instancia, destino);
+            crearTarea(instancia, destino, proceso.getAsignaciones());
             if ("GATEWAY_AND".equals(destino.getTipo())) {
                 verificarANDJoin(instancia, proceso, destino);
             }
@@ -302,7 +302,7 @@ public class MotorBPMService {
     private void resolverANDFork(InstanciaProceso instancia, Proceso proceso, List<Conexion> salientes) {
         for (Conexion conexion : salientes) {
             Nodo destino = findNodo(proceso, conexion.getDestinoId());
-            crearTarea(instancia, destino);
+            crearTarea(instancia, destino, proceso.getAsignaciones());
             log.info("Rama paralela creada → nodo {} en instancia {}", destino.getId(), instancia.getId());
         }
     }
@@ -376,8 +376,7 @@ public class MotorBPMService {
         int maxReintentos = conexion.getMaxReintentos() != null ? conexion.getMaxReintentos() : 2;
 
         if (intentosActuales < maxReintentos) {
-            // ✅ Aún dentro del límite: volver atrás
-            TareaInstancia nuevaTarea = crearTarea(instancia, nodoDestino);
+            TareaInstancia nuevaTarea = crearTarea(instancia, nodoDestino, proceso.getAsignaciones());
             nuevaTarea.setIntentos(intentosActuales + 1);
             tareaRepository.save(nuevaTarea);
             log.info("RETORNO activado: intento {}/{} hacia nodo {}", intentosActuales + 1, maxReintentos, nodoDestino.getId());
@@ -394,9 +393,8 @@ public class MotorBPMService {
                 instanciaRepository.save(instancia);
                 log.error("Sin ruta de salida de error en nodo {}. Instancia {} en ERROR", nodoOrigenId, instancia.getId());
             } else {
-                // Tomar la primera alternativa (normalmente la ruta "Error" o "Cancelar")
                 Nodo nodoError = findNodo(proceso, alternativas.get(0).getDestinoId());
-                crearTarea(instancia, nodoError);
+                crearTarea(instancia, nodoError, proceso.getAsignaciones());
             }
         }
     }
@@ -409,26 +407,26 @@ public class MotorBPMService {
      * Crea una TareaInstancia pendiente para el nodo dado.
      * El departamento se toma del nodo si es ACTIVIDAD; gateways no crean tarea real.
      */
-    private TareaInstancia crearTarea(InstanciaProceso instancia, Nodo nodo) {
-        // Los gateways no son tareas humanas.
+    private TareaInstancia crearTarea(InstanciaProceso instancia, Nodo nodo, Map<String, String> asignaciones) {
         if ("GATEWAY_XOR".equals(nodo.getTipo())) {
-            // XOR avanza inmediatamente
-            avanzar(instancia, nodo, procesoRepository.findById(instancia.getProcesoId()).orElseThrow());
+            Proceso proceso = procesoRepository.findById(instancia.getProcesoId()).orElseThrow();
+            avanzar(instancia, nodo, proceso);
             return null;
         }
-        
         if ("GATEWAY_AND".equals(nodo.getTipo())) {
-            // El AND se evalúa y sincroniza desde su método verificarANDJoin. No podemos avanzar a ciegas aquí.
             return null;
         }
+
+        String asignadoA = (asignaciones != null && nodo.getDepartamentoId() != null)
+                ? asignaciones.get(nodo.getDepartamentoId())
+                : null;
 
         TareaInstancia tarea = TareaInstancia.builder()
                 .instanciaId(instancia.getId())
                 .nodoId(nodo.getId())
                 .nodoLabel(nodo.getLabel())
                 .departamentoId(nodo.getDepartamentoId())
-                // Embebemos el formulario del nodo en la tarea para que el frontend
-                // pueda renderizarlo directamente sin otra query al proceso.
+                .asignadoA(asignadoA)
                 .formularioCampos(nodo.getFormulario())
                 .build();
 
@@ -479,8 +477,8 @@ public class MotorBPMService {
      * Devuelve las tareas PENDIENTES del departamento del usuario logueado.
      * Esta es la "bandeja de entrada" del funcionario.
      */
-    public List<TareaInstancia> obtenerMisTareas(String departamentoId) {
-        return tareaRepository.findByDepartamentoIdAndEstado(departamentoId, "PENDIENTE");
+    public List<TareaInstancia> obtenerMisTareas(String userId) {
+        return tareaRepository.findByAsignadoAAndEstadoIn(userId, Arrays.asList("PENDIENTE", "EN_PROGRESO"));
     }
 
     public TareaInstancia iniciarTrabajo(String tareaId) {

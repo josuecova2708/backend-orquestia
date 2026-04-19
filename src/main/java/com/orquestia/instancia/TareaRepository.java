@@ -14,6 +14,9 @@ public interface TareaRepository extends MongoRepository<TareaInstancia, String>
     // Tareas pendientes de un departamento (vista del funcionario)
     List<TareaInstancia> findByDepartamentoIdAndEstado(String departamentoId, String estado);
 
+    // Tareas asignadas a un usuario específico (nuevo sistema con asignaciones por proceso)
+    List<TareaInstancia> findByAsignadoAAndEstadoIn(String asignadoA, List<String> estados);
+
     // Tareas de una ejecución en cierto estado (para verificar AND Join)
     List<TareaInstancia> findByInstanciaIdAndEstado(String instanciaId, String estado);
 

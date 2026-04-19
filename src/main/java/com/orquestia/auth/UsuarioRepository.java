@@ -25,4 +25,6 @@ public interface UsuarioRepository extends MongoRepository<Usuario, String> {
     List<Usuario> findByEmpresaId(String empresaId);
 
     List<Usuario> findByEmpresaIdAndDepartamentoId(String empresaId, String departamentoId);
+
+    boolean existsByEmpresaIdAndDepartamentoIdAndRol(String empresaId, String departamentoId, Rol rol);
 }

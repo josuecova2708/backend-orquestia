@@ -132,6 +132,7 @@ public class AuthService {
                 .apellido(usuario.getApellido())
                 .rol(usuario.getRol())
                 .empresaId(usuario.getEmpresaId())
+                .departamentoId(usuario.getDepartamentoId())
                 .build();
     }
 }

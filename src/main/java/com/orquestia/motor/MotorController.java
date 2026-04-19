@@ -88,8 +88,8 @@ public class MotorController {
      * Bandeja de entrada del funcionario: tareas PENDIENTES de su departamento.
      */
     @GetMapping("/mis-tareas")
-    public ResponseEntity<List<TareaInstancia>> obtenerMisTareas(@RequestParam String departamentoId) {
-        return ResponseEntity.ok(motor.obtenerMisTareas(departamentoId));
+    public ResponseEntity<List<TareaInstancia>> obtenerMisTareas(Authentication auth) {
+        return ResponseEntity.ok(motor.obtenerMisTareas(auth.getName()));
     }
 
     /**

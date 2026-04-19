@@ -1,8 +1,10 @@
 package com.orquestia.auth;
 
+import com.orquestia.auth.dto.CrearFuncionarioRequest;
 import com.orquestia.auth.dto.UsuarioResponse;
 import com.orquestia.auth.dto.UsuarioUpdateRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,6 +21,27 @@ import java.util.stream.Collectors;
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    /**
+     * Crea un funcionario nuevo y lo asigna a la empresa y departamento indicados.
+     * Solo el admin de la empresa debería llamar esto.
+     */
+    public UsuarioResponse crearFuncionario(String empresaId, CrearFuncionarioRequest req) {
+        if (usuarioRepository.existsByEmail(req.getEmail())) {
+            throw new RuntimeException("Ya existe un usuario con ese email");
+        }
+        Usuario usuario = Usuario.builder()
+                .email(req.getEmail())
+                .password(passwordEncoder.encode(req.getPassword()))
+                .nombre(req.getNombre())
+                .apellido(req.getApellido())
+                .rol(Rol.FUNCIONARIO)
+                .empresaId(empresaId)
+                .departamentoId(req.getDepartamentoId())
+                .build();
+        return toResponse(usuarioRepository.save(usuario));
+    }
 
     /**
      * Lista todos los usuarios, opcionalmente filtrados por empresa.

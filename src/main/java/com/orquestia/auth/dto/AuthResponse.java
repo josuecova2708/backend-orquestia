@@ -21,4 +21,5 @@ public class AuthResponse {
     private String apellido;
     private Rol rol;
     private String empresaId;
+    private String departamentoId;
 }

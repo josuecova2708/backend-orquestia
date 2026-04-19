@@ -64,6 +64,9 @@ public class ProcesoService {
         if (request.getConexiones() != null) {
             proceso.setConexiones(request.getConexiones());
         }
+        if (request.getAsignaciones() != null) {
+            proceso.setAsignaciones(request.getAsignaciones());
+        }
 
         return procesoRepository.save(proceso);
     }
@@ -114,5 +117,38 @@ public class ProcesoService {
      */
     public void eliminarProceso(String id) {
         procesoRepository.deleteById(id);
+    }
+
+    /**
+     * Devuelve los procesos PUBLICADOS donde el userId está asignado al departamento
+     * del primer nodo ACTIVIDAD. Usado por funcionarios para saber qué procesos pueden iniciar.
+     */
+    public List<Proceso> listarIniciables(String empresaId, String userId) {
+        return procesoRepository.findByEmpresaIdAndEstado(empresaId, "PUBLICADO")
+                .stream()
+                .filter(p -> esIniciadoPor(p, userId))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /** Guarda solo las asignaciones de un proceso (departamentoId → userId). */
+    public Proceso guardarAsignaciones(String procesoId, java.util.Map<String, String> asignaciones) {
+        Proceso proceso = obtenerProceso(procesoId);
+        proceso.setAsignaciones(asignaciones);
+        return procesoRepository.save(proceso);
+    }
+
+    private boolean esIniciadoPor(Proceso proceso, String userId) {
+        return proceso.getNodos().stream()
+                .filter(n -> "INICIO".equals(n.getTipo()))
+                .findFirst()
+                .flatMap(inicio -> proceso.getConexiones().stream()
+                        .filter(c -> c.getOrigenId().equals(inicio.getId()))
+                        .findFirst())
+                .flatMap(conn -> proceso.getNodos().stream()
+                        .filter(n -> n.getId().equals(conn.getDestinoId())
+                                && "ACTIVIDAD".equals(n.getTipo()))
+                        .findFirst())
+                .map(n -> userId.equals(proceso.getAsignaciones().get(n.getDepartamentoId())))
+                .orElse(false);
     }
 }

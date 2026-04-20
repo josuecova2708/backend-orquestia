@@ -33,16 +33,23 @@ public class JwtService {
     private long expiration;
 
     /**
-     * Genera un token JWT para un usuario.
+     * Genera un token JWT para un usuario (usa el empresaId actual del usuario).
      */
     public String generateToken(Usuario usuario) {
+        return generateTokenForEmpresa(usuario, usuario.getEmpresaId());
+    }
+
+    /**
+     * Genera un token JWT sobreescribiendo el empresaId (para switch de empresa o multi-admin).
+     */
+    public String generateTokenForEmpresa(Usuario usuario, String empresaId) {
         return Jwts.builder()
                 .subject(usuario.getId())
                 .claims(Map.of(
                         "email", usuario.getEmail(),
                         "nombre", usuario.getNombre(),
                         "rol", usuario.getRol().name(),
-                        "empresaId", usuario.getEmpresaId() != null ? usuario.getEmpresaId() : ""
+                        "empresaId", empresaId != null ? empresaId : ""
                 ))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))

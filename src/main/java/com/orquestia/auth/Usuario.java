@@ -10,14 +10,9 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Modelo MongoDB para usuarios del sistema.
- * 
- * @Document → Le dice a Spring que esto se guarda como documento en MongoDB (colección "usuarios")
- * @Data → Lombok genera getters, setters, toString, equals, hashCode automáticamente
- * @Builder → Permite crear objetos con: Usuario.builder().email("x").build()
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -31,7 +26,7 @@ public class Usuario {
     @Indexed(unique = true)
     private String email;
 
-    private String password; // BCrypt hash, NUNCA texto plano
+    private String password;
 
     private String nombre;
     private String apellido;
@@ -39,8 +34,11 @@ public class Usuario {
     @Builder.Default
     private Rol rol = Rol.FUNCIONARIO;
 
-    private String empresaId;       // Referencia a la empresa
-    private String departamentoId;  // Referencia al departamento (para funcionarios)
+    private String empresaId;
+    private String departamentoId;
+
+    @Builder.Default
+    private List<String> empresasAdmin = new ArrayList<>();
 
     @Builder.Default
     private boolean activo = true;

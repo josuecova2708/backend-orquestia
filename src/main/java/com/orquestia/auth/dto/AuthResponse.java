@@ -4,13 +4,13 @@ import com.orquestia.auth.Rol;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-/**
- * Respuesta que recibe el frontend después de login/register.
- * Incluye el JWT token que debe enviarse en cada petición subsecuente.
- */
+import java.util.List;
+
 @Data
 @Builder
+@NoArgsConstructor
 @AllArgsConstructor
 public class AuthResponse {
 
@@ -22,4 +22,5 @@ public class AuthResponse {
     private Rol rol;
     private String empresaId;
     private String departamentoId;
+    private List<EmpresaResumen> empresasAdmin;
 }

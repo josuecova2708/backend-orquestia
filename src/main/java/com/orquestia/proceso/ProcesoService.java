@@ -1,16 +1,24 @@
 package com.orquestia.proceso;
 
+import com.orquestia.instancia.InstanciaRepository;
+import com.orquestia.notificacion.NotificacionService;
 import com.orquestia.proceso.dto.ProcesoRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class ProcesoService {
 
     private final ProcesoRepository procesoRepository;
+    private final InstanciaRepository instanciaRepository;
+    private final NotificacionService notificacionService;
+    private final SimpMessagingTemplate ws;
 
     /**
      * Crea un nuevo proceso en estado BORRADOR.
@@ -113,9 +121,45 @@ public class ProcesoService {
     }
 
     /**
-     * Elimina un proceso.
+     * Crea una nueva versión editable (BORRADOR) copiando un proceso PUBLICADO.
+     * El proceso original queda ARCHIVADO; las instancias activas no se ven afectadas
+     * porque el motor las localiza por procesoId, no por estado.
+     */
+    public Proceso crearNuevaVersion(String id) {
+        Proceso viejo = obtenerProceso(id);
+        if (!"PUBLICADO".equals(viejo.getEstado())) {
+            throw new RuntimeException("Solo se puede crear nueva versión de un proceso PUBLICADO");
+        }
+
+        // Archivar el proceso actual
+        viejo.setEstado("ARCHIVADO");
+        procesoRepository.save(viejo);
+
+        // Crear copia en BORRADOR con la misma versión (se incrementará al publicar)
+        Proceso nuevo = Proceso.builder()
+                .nombre(viejo.getNombre())
+                .descripcion(viejo.getDescripcion())
+                .empresaId(viejo.getEmpresaId())
+                .creadoPor(viejo.getCreadoPor())
+                .nodos(new java.util.ArrayList<>(viejo.getNodos()))
+                .conexiones(new java.util.ArrayList<>(viejo.getConexiones()))
+                .asignaciones(viejo.getAsignaciones() != null
+                        ? new java.util.HashMap<>(viejo.getAsignaciones()) : new java.util.HashMap<>())
+                .version(viejo.getVersion())
+                .build();
+
+        return procesoRepository.save(nuevo);
+    }
+
+    /**
+     * Elimina un proceso. Falla con 409 si existen instancias activas.
      */
     public void eliminarProceso(String id) {
+        if (!instanciaRepository.findByProcesoIdAndEstado(id, "ACTIVA").isEmpty()) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "No se puede eliminar un proceso con instancias activas");
+        }
         procesoRepository.deleteById(id);
     }
 
@@ -130,11 +174,32 @@ public class ProcesoService {
                 .collect(java.util.stream.Collectors.toList());
     }
 
-    /** Guarda solo las asignaciones de un proceso (departamentoId → userId). */
-    public Proceso guardarAsignaciones(String procesoId, java.util.Map<String, String> asignaciones) {
+    /** Guarda las asignaciones (departamentoId → userId) y notifica a cada funcionario asignado. */
+    public Proceso guardarAsignaciones(String procesoId, Map<String, String> asignaciones) {
         Proceso proceso = obtenerProceso(procesoId);
+        Map<String, String> anteriores = proceso.getAsignaciones() != null
+                ? proceso.getAsignaciones() : Map.of();
+
         proceso.setAsignaciones(asignaciones);
-        return procesoRepository.save(proceso);
+        Proceso guardado = procesoRepository.save(proceso);
+
+        // Notificar y avisar por WS solo a usuarios recién asignados
+        asignaciones.forEach((deptId, userId) -> {
+            if (userId != null && !userId.equals(anteriores.get(deptId))) {
+                Map<String, Object> payload = Map.of(
+                        "tipo", "PROCESO_ASIGNADO",
+                        "procesoId", procesoId,
+                        "procesoNombre", proceso.getNombre()
+                );
+                notificacionService.crear(userId, "PROCESO_ASIGNADO",
+                        "Has sido asignado al proceso: " + proceso.getNombre(),
+                        payload
+                );
+                ws.convertAndSend("/topic/usuario/" + userId, payload);
+            }
+        });
+
+        return guardado;
     }
 
     private boolean esIniciadoPor(Proceso proceso, String userId) {

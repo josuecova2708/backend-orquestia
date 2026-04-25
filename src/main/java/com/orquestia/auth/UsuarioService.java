@@ -3,11 +3,15 @@ package com.orquestia.auth;
 import com.orquestia.auth.dto.CrearFuncionarioRequest;
 import com.orquestia.auth.dto.UsuarioResponse;
 import com.orquestia.auth.dto.UsuarioUpdateRequest;
+import com.orquestia.empresa.DepartamentoRepository;
+import com.orquestia.notificacion.NotificacionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -22,6 +26,9 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final DepartamentoRepository departamentoRepository;
+    private final NotificacionService notificacionService;
+    private final SimpMessagingTemplate ws;
 
     /**
      * Crea un funcionario nuevo y lo asigna a la empresa y departamento indicados.
@@ -85,8 +92,21 @@ public class UsuarioService {
         if (request.getEmpresaId() != null) {
             usuario.setEmpresaId(request.getEmpresaId());
         }
-        if (request.getDepartamentoId() != null) {
+        if (request.getDepartamentoId() != null &&
+                !request.getDepartamentoId().equals(usuario.getDepartamentoId())) {
+            String deptNombre = departamentoRepository.findById(request.getDepartamentoId())
+                    .map(d -> d.getNombre()).orElse("un departamento");
             usuario.setDepartamentoId(request.getDepartamentoId());
+            Map<String, Object> payload = Map.of(
+                    "tipo", "DEPT_INVITACION",
+                    "departamentoId", request.getDepartamentoId(),
+                    "departamentoNombre", deptNombre
+            );
+            notificacionService.crear(usuario.getId(), "DEPT_INVITACION",
+                    "Has sido asignado al departamento: " + deptNombre,
+                    payload
+            );
+            ws.convertAndSend("/topic/usuario/" + usuario.getId(), payload);
         }
         if (request.getActivo() != null) {
             usuario.setActivo(request.getActivo());

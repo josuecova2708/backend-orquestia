@@ -61,12 +61,14 @@ public class MotorController {
     }
 
     /**
-     * GET /api/instancias?empresaId=xxx
-     * Lista las instancias ACTIVAS de una empresa (para poder cancelarlas desde el dashboard).
+     * GET /api/instancias?empresaId=xxx[&estado=ACTIVA]
+     * Lista instancias de una empresa. Sin estado → todas. Con estado → filtradas.
      */
     @GetMapping("/instancias")
-    public ResponseEntity<List<InstanciaProceso>> listarInstancias(@RequestParam String empresaId) {
-        return ResponseEntity.ok(motor.listarInstanciasActivas(empresaId));
+    public ResponseEntity<List<InstanciaProceso>> listarInstancias(
+            @RequestParam String empresaId,
+            @RequestParam(required = false) String estado) {
+        return ResponseEntity.ok(motor.listarInstancias(empresaId, estado));
     }
 
     /**
@@ -84,12 +86,21 @@ public class MotorController {
     // =========================================================================
 
     /**
-     * GET /api/mis-tareas?departamentoId=xxx
-     * Bandeja de entrada del funcionario: tareas PENDIENTES de su departamento.
+     * GET /api/mis-tareas
+     * Bandeja de entrada del funcionario: tareas PENDIENTES/EN_PROGRESO asignadas a él.
      */
     @GetMapping("/mis-tareas")
     public ResponseEntity<List<TareaInstancia>> obtenerMisTareas(Authentication auth) {
         return ResponseEntity.ok(motor.obtenerMisTareas(auth.getName()));
+    }
+
+    /**
+     * GET /api/mis-instancias
+     * Historial del funcionario: todas las instancias en las que participó.
+     */
+    @GetMapping("/mis-instancias")
+    public ResponseEntity<List<InstanciaProceso>> obtenerMisInstancias(Authentication auth) {
+        return ResponseEntity.ok(motor.obtenerMisInstancias(auth.getName()));
     }
 
     /**

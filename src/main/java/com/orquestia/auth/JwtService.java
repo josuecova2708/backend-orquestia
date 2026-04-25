@@ -64,11 +64,12 @@ public class JwtService {
         return extractClaims(token).getSubject();
     }
 
-    /**
-     * Extrae el email del token.
-     */
     public String extractEmail(String token) {
         return extractClaims(token).get("email", String.class);
+    }
+
+    public String extractNombre(String token) {
+        return extractClaims(token).get("nombre", String.class);
     }
 
     /**

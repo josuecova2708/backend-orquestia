@@ -4,6 +4,7 @@ import com.orquestia.instancia.InstanciaProceso;
 import com.orquestia.instancia.InstanciaRepository;
 import com.orquestia.instancia.TareaInstancia;
 import com.orquestia.instancia.TareaRepository;
+import com.orquestia.notificacion.NotificacionService;
 import com.orquestia.proceso.Conexion;
 import com.orquestia.proceso.Nodo;
 import com.orquestia.proceso.Proceso;
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -42,6 +44,8 @@ public class MotorBPMService {
     private final ProcesoRepository procesoRepository;
     private final InstanciaRepository instanciaRepository;
     private final TareaRepository tareaRepository;
+    private final SimpMessagingTemplate ws;
+    private final NotificacionService notificacionService;
 
     private final ExpressionParser spel = new SpelExpressionParser();
 
@@ -181,6 +185,7 @@ public class MotorBPMService {
             instancia.setEstado("COMPLETADA");
             instancia.setFechaFin(LocalDateTime.now());
             instanciaRepository.save(instancia);
+            notificarEmpresa(instancia);
             log.info("Instancia {} COMPLETADA", instancia.getId());
             return;
         }
@@ -364,37 +369,48 @@ public class MotorBPMService {
      */
     private void evaluarRetorno(InstanciaProceso instancia, Proceso proceso,
                                  Conexion conexion, Nodo nodoDestino) {
-        // Buscar la tarea actual del nodo origen del retorno para leer sus intentos
-        String nodoOrigenId = conexion.getOrigenId();
-        List<TareaInstancia> tareasOrigen = tareaRepository
-                .findByInstanciaIdAndNodoId(instancia.getId(), nodoOrigenId);
-
-        int intentosActuales = tareasOrigen.stream()
-                .mapToInt(TareaInstancia::getIntentos)
-                .max().orElse(0);
+        // El contador de reintentos vive en las variables de la instancia,
+        // con clave única por conexión RETORNO. Así funciona aunque el nodo
+        // origen sea un GATEWAY_XOR (que nunca genera tareas propias).
+        String keyIntentos = "__retorno_" + conexion.getId();
+        int intentosActuales = ((Number) instancia.getVariables()
+                .getOrDefault(keyIntentos, 0)).intValue();
 
         int maxReintentos = conexion.getMaxReintentos() != null ? conexion.getMaxReintentos() : 2;
 
+        log.info("RETORNO evaluando conexión {}: {}/{} intentos usados",
+                conexion.getId(), intentosActuales, maxReintentos);
+
         if (intentosActuales < maxReintentos) {
-            TareaInstancia nuevaTarea = crearTarea(instancia, nodoDestino, proceso.getAsignaciones());
-            nuevaTarea.setIntentos(intentosActuales + 1);
-            tareaRepository.save(nuevaTarea);
-            log.info("RETORNO activado: intento {}/{} hacia nodo {}", intentosActuales + 1, maxReintentos, nodoDestino.getId());
+            instancia.getVariables().put(keyIntentos, intentosActuales + 1);
+            instanciaRepository.save(instancia);
+            crearTarea(instancia, nodoDestino, proceso.getAsignaciones());
+            log.info("RETORNO activado: intento {}/{} → nodo {}",
+                    intentosActuales + 1, maxReintentos, nodoDestino.getId());
         } else {
-            // ❌ Límite superado: forzar salida de error (buscar conexión alternativa)
-            log.warn("RETORNO agotado ({} intentos). Forzando ruta de error desde nodo {}", intentosActuales, nodoOrigenId);
+            log.warn("RETORNO agotado (máximo {} intentos). Buscando ruta de salida desde nodo {}",
+                    maxReintentos, conexion.getOrigenId());
 
             List<Conexion> alternativas = proceso.getConexiones().stream()
-                    .filter(c -> c.getOrigenId().equals(nodoOrigenId) && !"RETORNO".equals(c.getTipo()))
+                    .filter(c -> c.getOrigenId().equals(conexion.getOrigenId())
+                              && !"RETORNO".equals(c.getTipo()))
                     .collect(Collectors.toList());
 
             if (alternativas.isEmpty()) {
                 instancia.setEstado("ERROR");
                 instanciaRepository.save(instancia);
-                log.error("Sin ruta de salida de error en nodo {}. Instancia {} en ERROR", nodoOrigenId, instancia.getId());
+                notificarEmpresa(instancia);
+                log.error("Sin ruta de salida tras agotar reintentos en nodo {}. Instancia {} → ERROR",
+                        conexion.getOrigenId(), instancia.getId());
             } else {
-                Nodo nodoError = findNodo(proceso, alternativas.get(0).getDestinoId());
-                crearTarea(instancia, nodoError, proceso.getAsignaciones());
+                // Preferir la conexión marcada esDefault; si ninguna lo está, usar la primera
+                Conexion elegida = alternativas.stream()
+                        .filter(Conexion::isEsDefault)
+                        .findFirst()
+                        .orElse(alternativas.get(0));
+                Nodo nodoSalida = findNodo(proceso, elegida.getDestinoId());
+                crearTarea(instancia, nodoSalida, proceso.getAsignaciones());
+                log.info("Ruta de salida tomada (esDefault={}) → nodo {}", elegida.isEsDefault(), nodoSalida.getId());
             }
         }
     }
@@ -408,7 +424,7 @@ public class MotorBPMService {
      * El departamento se toma del nodo si es ACTIVIDAD; gateways no crean tarea real.
      */
     private TareaInstancia crearTarea(InstanciaProceso instancia, Nodo nodo, Map<String, String> asignaciones) {
-        if ("GATEWAY_XOR".equals(nodo.getTipo())) {
+        if ("GATEWAY_XOR".equals(nodo.getTipo()) || "FIN".equals(nodo.getTipo())) {
             Proceso proceso = procesoRepository.findById(instancia.getProcesoId()).orElseThrow();
             avanzar(instancia, nodo, proceso);
             return null;
@@ -430,7 +446,23 @@ public class MotorBPMService {
                 .formularioCampos(nodo.getFormulario())
                 .build();
 
-        return tareaRepository.save(tarea);
+        TareaInstancia guardada = tareaRepository.save(tarea);
+
+        if (asignadoA != null) {
+            Map<String, Object> payload = Map.of(
+                "tipo", "TAREA_ASIGNADA",
+                "tareaId", guardada.getId(),
+                "nodoLabel", nodo.getLabel(),
+                "instanciaId", instancia.getId()
+            );
+            ws.convertAndSend("/topic/usuario/" + asignadoA, payload);
+            notificacionService.crear(asignadoA, "TAREA_ASIGNADA",
+                "Nueva tarea asignada: " + nodo.getLabel(),
+                payload
+            );
+        }
+
+        return guardada;
     }
 
     /**
@@ -474,11 +506,27 @@ public class MotorBPMService {
     }
 
     /**
-     * Devuelve las tareas PENDIENTES del departamento del usuario logueado.
+     * Devuelve las tareas PENDIENTES/EN_PROGRESO asignadas al usuario.
      * Esta es la "bandeja de entrada" del funcionario.
      */
     public List<TareaInstancia> obtenerMisTareas(String userId) {
         return tareaRepository.findByAsignadoAAndEstadoIn(userId, Arrays.asList("PENDIENTE", "EN_PROGRESO"));
+    }
+
+    /**
+     * Devuelve todas las instancias en las que el usuario tuvo al menos una tarea,
+     * ordenadas de más reciente a más antigua. Usado para el historial del funcionario.
+     */
+    public List<InstanciaProceso> obtenerMisInstancias(String userId) {
+        List<String> instanciaIds = tareaRepository.findByAsignadoA(userId)
+                .stream()
+                .map(TareaInstancia::getInstanciaId)
+                .distinct()
+                .collect(Collectors.toList());
+        return instanciaRepository.findAllById(instanciaIds)
+                .stream()
+                .sorted((a, b) -> b.getFechaInicio().compareTo(a.getFechaInicio()))
+                .collect(Collectors.toList());
     }
 
     public TareaInstancia iniciarTrabajo(String tareaId) {
@@ -498,6 +546,7 @@ public class MotorBPMService {
         instancia.setEstado("CANCELADA");
         instancia.setFechaFin(LocalDateTime.now());
         instanciaRepository.save(instancia);
+        notificarEmpresa(instancia);
 
         // Rechazar todas las tareas abiertas de esta instancia
         tareaRepository.findByInstanciaId(instanciaId).stream()
@@ -510,10 +559,26 @@ public class MotorBPMService {
         log.info("Instancia {} cancelada y tareas rechazadas", instanciaId);
     }
 
-    /** Lista las instancias activas de una empresa para el panel de control. */
+    /** Lista instancias de una empresa. Sin estado → todas; con estado → filtradas. */
+    public List<InstanciaProceso> listarInstancias(String empresaId, String estado) {
+        List<InstanciaProceso> todas = instanciaRepository.findByEmpresaId(empresaId);
+        if (estado != null && !estado.isBlank()) {
+            return todas.stream().filter(i -> estado.equals(i.getEstado())).collect(Collectors.toList());
+        }
+        return todas;
+    }
+
+    /** @deprecated usar listarInstancias(empresaId, "ACTIVA") */
     public List<InstanciaProceso> listarInstanciasActivas(String empresaId) {
-        return instanciaRepository.findByEmpresaId(empresaId).stream()
-                .filter(i -> "ACTIVA".equals(i.getEstado()))
-                .collect(Collectors.toList());
+        return listarInstancias(empresaId, "ACTIVA");
+    }
+
+    // Notifica al canal de empresa cuando una instancia cambia de estado
+    private void notificarEmpresa(InstanciaProceso instancia) {
+        ws.convertAndSend("/topic/empresa/" + instancia.getEmpresaId(), Map.of(
+                "tipo", "INSTANCIA_ACTUALIZADA",
+                "instanciaId", instancia.getId(),
+                "estado", instancia.getEstado()
+        ));
     }
 }

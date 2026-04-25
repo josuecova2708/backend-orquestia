@@ -84,6 +84,15 @@ public class ProcesoController {
         return ResponseEntity.ok(procesoService.archivarProceso(id));
     }
 
+    /**
+     * POST /api/procesos/{id}/nueva-version
+     * Archiva el proceso PUBLICADO y devuelve una copia en BORRADOR lista para editar.
+     */
+    @PostMapping("/{id}/nueva-version")
+    public ResponseEntity<Proceso> crearNuevaVersion(@PathVariable String id) {
+        return ResponseEntity.ok(procesoService.crearNuevaVersion(id));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarProceso(@PathVariable String id) {
         procesoService.eliminarProceso(id);

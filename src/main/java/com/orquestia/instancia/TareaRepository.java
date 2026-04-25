@@ -1,6 +1,7 @@
 package com.orquestia.instancia;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
+import java.util.Collection;
 import java.util.List;
 
 public interface TareaRepository extends MongoRepository<TareaInstancia, String> {
@@ -17,9 +18,15 @@ public interface TareaRepository extends MongoRepository<TareaInstancia, String>
     // Tareas asignadas a un usuario específico (nuevo sistema con asignaciones por proceso)
     List<TareaInstancia> findByAsignadoAAndEstadoIn(String asignadoA, List<String> estados);
 
+    // Todas las tareas de un usuario (cualquier estado) — para historial
+    List<TareaInstancia> findByAsignadoA(String asignadoA);
+
     // Tareas de una ejecución en cierto estado (para verificar AND Join)
     List<TareaInstancia> findByInstanciaIdAndEstado(String instanciaId, String estado);
 
     // Para contar si una tarea de un nodo origen ya está completada (AND Join check)
     List<TareaInstancia> findByInstanciaIdAndNodoIdAndEstado(String instanciaId, String nodoId, String estado);
+
+    // Para métricas BI: todas las tareas de un conjunto de instancias
+    List<TareaInstancia> findByInstanciaIdIn(Collection<String> instanciaIds);
 }

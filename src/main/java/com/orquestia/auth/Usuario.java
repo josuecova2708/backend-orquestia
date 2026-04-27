@@ -41,6 +41,9 @@ public class Usuario {
     private List<String> empresasAdmin = new ArrayList<>();
 
     @Builder.Default
+    private List<String> deviceTokens = new ArrayList<>();
+
+    @Builder.Default
     private boolean activo = true;
 
     @CreatedDate

@@ -9,6 +9,9 @@ public interface TareaRepository extends MongoRepository<TareaInstancia, String>
     // Todas las tareas de una ejecución
     List<TareaInstancia> findByInstanciaId(String instanciaId);
 
+    // Tareas de una ejecución ordenadas por fecha de creación (para timeline)
+    List<TareaInstancia> findByInstanciaIdOrderByFechaCreacionAsc(String instanciaId);
+
     // Tareas de una ejecución para un nodo específico (usado por AND Join)
     List<TareaInstancia> findByInstanciaIdAndNodoId(String instanciaId, String nodoId);
 

@@ -1,5 +1,6 @@
 package com.orquestia.motor;
 
+import com.orquestia.auth.UsuarioRepository;
 import com.orquestia.instancia.InstanciaProceso;
 import com.orquestia.instancia.InstanciaRepository;
 import com.orquestia.instancia.TareaInstancia;
@@ -18,10 +19,12 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.Arrays;
 
 /**
  * MotorBPMService — Corazón del sistema de ejecución de procesos.
@@ -44,6 +47,7 @@ public class MotorBPMService {
     private final ProcesoRepository procesoRepository;
     private final InstanciaRepository instanciaRepository;
     private final TareaRepository tareaRepository;
+    private final UsuarioRepository usuarioRepository;
     private final SimpMessagingTemplate ws;
     private final NotificacionService notificacionService;
 
@@ -71,10 +75,16 @@ public class MotorBPMService {
         }
 
         // 2. Crear la instancia
+        String creadoPorNombre = usuarioRepository.findById(usuarioId)
+                .map(u -> u.getNombre() + " " + u.getApellido())
+                .orElse(usuarioId);
+
         InstanciaProceso instancia = InstanciaProceso.builder()
                 .procesoId(procesoId)
+                .procesoNombre(proceso.getNombre())
                 .empresaId(proceso.getEmpresaId())
                 .creadoPor(usuarioId)
+                .creadoPorNombre(creadoPorNombre)
                 .build();
 
         if (variablesIniciales != null) {
@@ -523,10 +533,12 @@ public class MotorBPMService {
                 .map(TareaInstancia::getInstanciaId)
                 .distinct()
                 .collect(Collectors.toList());
-        return instanciaRepository.findAllById(instanciaIds)
+        List<InstanciaProceso> instancias = instanciaRepository.findAllById(instanciaIds)
                 .stream()
                 .sorted((a, b) -> b.getFechaInicio().compareTo(a.getFechaInicio()))
                 .collect(Collectors.toList());
+        enrichNombres(instancias);
+        return instancias;
     }
 
     public TareaInstancia iniciarTrabajo(String tareaId) {
@@ -563,9 +575,38 @@ public class MotorBPMService {
     public List<InstanciaProceso> listarInstancias(String empresaId, String estado) {
         List<InstanciaProceso> todas = instanciaRepository.findByEmpresaId(empresaId);
         if (estado != null && !estado.isBlank()) {
-            return todas.stream().filter(i -> estado.equals(i.getEstado())).collect(Collectors.toList());
+            todas = todas.stream().filter(i -> estado.equals(i.getEstado())).collect(Collectors.toList());
         }
+        enrichNombres(todas);
         return todas;
+    }
+
+    /** Enriquece instancias antiguas con procesoNombre y creadoPorNombre si les falta. */
+    private void enrichNombres(List<InstanciaProceso> instancias) {
+        Set<String> procesoIds = instancias.stream()
+                .filter(i -> i.getProcesoNombre() == null || i.getProcesoNombre().isBlank())
+                .map(InstanciaProceso::getProcesoId)
+                .collect(Collectors.toSet());
+        Map<String, String> procesoNombres = new HashMap<>();
+        procesoIds.forEach(pid -> procesoRepository.findById(pid)
+                .ifPresent(p -> procesoNombres.put(pid, p.getNombre())));
+
+        Set<String> userIds = instancias.stream()
+                .filter(i -> i.getCreadoPorNombre() == null || i.getCreadoPorNombre().isBlank())
+                .map(InstanciaProceso::getCreadoPor)
+                .collect(Collectors.toSet());
+        Map<String, String> userNombres = new HashMap<>();
+        userIds.forEach(uid -> usuarioRepository.findById(uid)
+                .ifPresent(u -> userNombres.put(uid, u.getNombre() + " " + u.getApellido())));
+
+        instancias.forEach(i -> {
+            if (i.getProcesoNombre() == null || i.getProcesoNombre().isBlank()) {
+                i.setProcesoNombre(procesoNombres.getOrDefault(i.getProcesoId(), i.getProcesoId()));
+            }
+            if (i.getCreadoPorNombre() == null || i.getCreadoPorNombre().isBlank()) {
+                i.setCreadoPorNombre(userNombres.getOrDefault(i.getCreadoPor(), i.getCreadoPor()));
+            }
+        });
     }
 
     /** @deprecated usar listarInstancias(empresaId, "ACTIVA") */

@@ -1,5 +1,6 @@
 package com.orquestia.notificacion;
 
+import com.orquestia.auth.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -11,9 +12,11 @@ import java.util.Map;
 public class NotificacionService {
 
     private final NotificacionRepository notificacionRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final FcmService fcmService;
 
     public Notificacion crear(String userId, String tipo, String mensaje, Map<String, Object> metadata) {
-        return notificacionRepository.save(
+        Notificacion notif = notificacionRepository.save(
             Notificacion.builder()
                 .userId(userId)
                 .tipo(tipo)
@@ -21,6 +24,18 @@ public class NotificacionService {
                 .metadata(metadata != null ? metadata : Map.of())
                 .build()
         );
+
+        usuarioRepository.findById(userId).ifPresent(usuario -> {
+            if (!usuario.getDeviceTokens().isEmpty()) {
+                Map<String, String> data = Map.of(
+                        "tipo", tipo,
+                        "notificacionId", notif.getId()
+                );
+                fcmService.sendPush(usuario.getDeviceTokens(), "Orquestia", mensaje, data);
+            }
+        });
+
+        return notif;
     }
 
     public List<Notificacion> listar(String userId) {

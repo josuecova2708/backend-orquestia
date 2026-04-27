@@ -73,6 +73,13 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Firebase Admin SDK (FCM push notifications) -->
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.3.0</version>
+		</dependency>
+
 		<!-- MinIO (S3-compatible object storage) -->
 		<dependency>
 			<groupId>io.minio</groupId>

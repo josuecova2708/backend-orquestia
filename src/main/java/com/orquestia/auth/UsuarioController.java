@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -56,4 +57,33 @@ public class UsuarioController {
         usuarioService.desactivarUsuario(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/device-token")
+    public ResponseEntity<Void> registrarDeviceToken(
+            @RequestBody DeviceTokenRequest request,
+            Authentication auth) {
+        Usuario usuario = usuarioRepository.findById(auth.getName())
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        if (usuario.getDeviceTokens() == null) usuario.setDeviceTokens(new ArrayList<>());
+        if (!usuario.getDeviceTokens().contains(request.token())) {
+            usuario.getDeviceTokens().add(request.token());
+            usuarioRepository.save(usuario);
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/device-token")
+    public ResponseEntity<Void> eliminarDeviceToken(
+            @RequestBody DeviceTokenRequest request,
+            Authentication auth) {
+        usuarioRepository.findById(auth.getName()).ifPresent(usuario -> {
+            if (usuario.getDeviceTokens() != null) {
+                usuario.getDeviceTokens().remove(request.token());
+                usuarioRepository.save(usuario);
+            }
+        });
+        return ResponseEntity.noContent().build();
+    }
+
+    record DeviceTokenRequest(String token) {}
 }

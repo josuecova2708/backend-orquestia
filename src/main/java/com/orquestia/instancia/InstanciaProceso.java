@@ -40,9 +40,11 @@ public class InstanciaProceso {
     @Id
     private String id;
 
-    private String procesoId;       // ID del proceso (definición) que se ejecuta
+    private String procesoId;         // ID del proceso (definición) que se ejecuta
+    private String procesoNombre;     // Nombre del proceso (desnormalizado para display)
     private String empresaId;
-    private String creadoPor;       // userId que arrancó el proceso
+    private String creadoPor;         // userId que arrancó el proceso
+    private String creadoPorNombre;   // Nombre completo del usuario que arrancó el proceso
 
     @Builder.Default
     private String estado = "ACTIVA"; // ACTIVA | COMPLETADA | CANCELADA | ERROR

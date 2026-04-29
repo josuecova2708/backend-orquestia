@@ -7,9 +7,11 @@ public record MetricasEmpresaResponse(
         Map<String, Long> instanciasPorEstado,
         List<CuelloBotella> cuellosBottela,
         List<CargaFuncionario> cargaFuncionarios,
-        List<ActividadDia> actividadReciente
+        List<ActividadDia> actividadReciente,
+        List<TiempoProceso> tiemposPorProceso
 ) {
     public record CuelloBotella(String nodoLabel, double avgMinutos, long total) {}
     public record CargaFuncionario(String userId, long pendientes) {}
     public record ActividadDia(String fecha, long total) {}
+    public record TiempoProceso(String procesoNombre, double avgMinutos, long total) {}
 }

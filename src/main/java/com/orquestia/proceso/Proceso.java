@@ -58,6 +58,14 @@ public class Proceso {
     @Builder.Default
     private Map<String, String> asignaciones = new HashMap<>();
 
+    /** Si true, este proceso aparece en el chatbot de recepción y clientes pueden iniciarlo */
+    @Builder.Default
+    private boolean habilitadoParaClientes = false;
+
+    /** Documentos que el cliente debe aportar ANTES de que el motor BPM cree la instancia */
+    @Builder.Default
+    private List<RequisitoDocumento> documentosRequeridos = new ArrayList<>();
+
     @Builder.Default
     private int version = 1;
 

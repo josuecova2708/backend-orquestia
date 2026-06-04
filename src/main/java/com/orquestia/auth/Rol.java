@@ -10,5 +10,6 @@ package com.orquestia.auth;
 public enum Rol {
     ADMIN,
     DISEÑADOR,
-    FUNCIONARIO
+    FUNCIONARIO,
+    CLIENTE
 }

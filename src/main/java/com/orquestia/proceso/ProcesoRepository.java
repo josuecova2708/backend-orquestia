@@ -10,5 +10,8 @@ public interface ProcesoRepository extends MongoRepository<Proceso, String> {
 
     List<Proceso> findByEmpresaIdAndEstado(String empresaId, String estado);
 
+    List<Proceso> findByEmpresaIdAndEstadoAndHabilitadoParaClientes(
+            String empresaId, String estado, boolean habilitadoParaClientes);
+
     List<Proceso> findByCreadoPor(String userId);
 }

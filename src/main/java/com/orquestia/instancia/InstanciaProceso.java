@@ -45,6 +45,7 @@ public class InstanciaProceso {
     private String empresaId;
     private String creadoPor;         // userId que arrancó el proceso
     private String creadoPorNombre;   // Nombre completo del usuario que arrancó el proceso
+    private String clienteId;         // userId del cliente si fue iniciado por un cliente (null si lo inicia un funcionario/admin)
 
     @Builder.Default
     private String estado = "ACTIVA"; // ACTIVA | COMPLETADA | CANCELADA | ERROR

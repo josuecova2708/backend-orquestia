@@ -1,5 +1,6 @@
 package com.orquestia.proceso;
 
+import com.orquestia.proceso.dto.ConfiguracionClienteRequest;
 import com.orquestia.proceso.dto.ProcesoRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -46,12 +47,30 @@ public class ProcesoController {
         return ResponseEntity.ok(procesoService.listarProcesos(empresaId, estado));
     }
 
+    /**
+     * GET /api/procesos/publicos?empresaId=X
+     * Procesos PUBLICADOS y habilitados para clientes. Endpoint público (sin JWT).
+     * Usado por el chatbot clasificador y la pantalla de registro de clientes.
+     */
+    @GetMapping("/publicos")
+    public ResponseEntity<List<Proceso>> listarPublicos(@RequestParam String empresaId) {
+        return ResponseEntity.ok(procesoService.listarPublicos(empresaId));
+    }
+
     /** Procesos que puede iniciar el usuario autenticado (según asignaciones) */
     @GetMapping("/iniciables")
     public ResponseEntity<List<Proceso>> listarIniciables(
             @RequestParam String empresaId,
             Authentication auth) {
         return ResponseEntity.ok(procesoService.listarIniciables(empresaId, auth.getName()));
+    }
+
+    /** Configura visibilidad para clientes y documentos requeridos al inicio del trámite */
+    @PutMapping("/{id}/configuracion-cliente")
+    public ResponseEntity<Proceso> configurarCliente(
+            @PathVariable String id,
+            @RequestBody ConfiguracionClienteRequest request) {
+        return ResponseEntity.ok(procesoService.configurarCliente(id, request));
     }
 
     /** Guarda las asignaciones (departamentoId → userId) de un proceso */

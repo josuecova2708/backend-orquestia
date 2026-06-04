@@ -3,6 +3,7 @@ package com.orquestia.auth;
 import com.orquestia.auth.dto.AuthResponse;
 import com.orquestia.auth.dto.InvitarAdminRequest;
 import com.orquestia.auth.dto.LoginRequest;
+import com.orquestia.auth.dto.RegisterClienteRequest;
 import com.orquestia.auth.dto.RegisterRequest;
 import com.orquestia.auth.dto.SetupEmpresaRequest;
 import jakarta.validation.Valid;
@@ -29,6 +30,14 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.register(request));
+    }
+
+    /** Registro público para clientes. El empresaId llega en la URL del portal de la empresa. */
+    @PostMapping("/register-cliente")
+    public ResponseEntity<AuthResponse> registerCliente(
+            @Valid @RequestBody RegisterClienteRequest request,
+            @RequestParam String empresaId) {
+        return ResponseEntity.ok(authService.registrarCliente(request, empresaId));
     }
 
     @PostMapping("/login")

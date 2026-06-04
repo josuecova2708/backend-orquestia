@@ -2,6 +2,7 @@ package com.orquestia.proceso;
 
 import com.orquestia.instancia.InstanciaRepository;
 import com.orquestia.notificacion.NotificacionService;
+import com.orquestia.proceso.dto.ConfiguracionClienteRequest;
 import com.orquestia.proceso.dto.ProcesoRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -145,6 +146,9 @@ public class ProcesoService {
                 .conexiones(new java.util.ArrayList<>(viejo.getConexiones()))
                 .asignaciones(viejo.getAsignaciones() != null
                         ? new java.util.HashMap<>(viejo.getAsignaciones()) : new java.util.HashMap<>())
+                .habilitadoParaClientes(viejo.isHabilitadoParaClientes())
+                .documentosRequeridos(viejo.getDocumentosRequeridos() != null
+                        ? new java.util.ArrayList<>(viejo.getDocumentosRequeridos()) : new java.util.ArrayList<>())
                 .version(viejo.getVersion())
                 .build();
 
@@ -200,6 +204,22 @@ public class ProcesoService {
         });
 
         return guardado;
+    }
+
+    /** Devuelve procesos PUBLICADOS y habilitados para clientes de una empresa. */
+    public List<Proceso> listarPublicos(String empresaId) {
+        return procesoRepository.findByEmpresaIdAndEstadoAndHabilitadoParaClientes(
+                empresaId, "PUBLICADO", true);
+    }
+
+    /** Actualiza la configuración de visibilidad para clientes y sus documentos requeridos. */
+    public Proceso configurarCliente(String id, ConfiguracionClienteRequest request) {
+        Proceso proceso = obtenerProceso(id);
+        proceso.setHabilitadoParaClientes(request.isHabilitadoParaClientes());
+        if (request.getDocumentosRequeridos() != null) {
+            proceso.setDocumentosRequeridos(request.getDocumentosRequeridos());
+        }
+        return procesoRepository.save(proceso);
     }
 
     private boolean esIniciadoPor(Proceso proceso, String userId) {

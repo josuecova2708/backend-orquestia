@@ -4,6 +4,7 @@ import com.orquestia.auth.dto.AuthResponse;
 import com.orquestia.auth.dto.EmpresaResumen;
 import com.orquestia.auth.dto.InvitarAdminRequest;
 import com.orquestia.auth.dto.LoginRequest;
+import com.orquestia.auth.dto.RegisterClienteRequest;
 import com.orquestia.auth.dto.RegisterRequest;
 import com.orquestia.auth.dto.SetupEmpresaRequest;
 import com.orquestia.empresa.Empresa;
@@ -102,7 +103,7 @@ public class AuthService {
     }
 
     /**
-     * Cambia la empresa activa del admin y genera un nuevo token con ese empresaId.
+     * Cambia la empre  sa activa del admin y genera un nuevo token con ese empresaId.
      */
     public AuthResponse switchEmpresa(String userId, String empresaId) {
         Usuario usuario = usuarioRepository.findById(userId)
@@ -159,6 +160,31 @@ public class AuthService {
 
         return buildAuthResponse(invitado, "", empresaId,
                 buildEmpresaResumenes(invitado.getEmpresasAdmin()));
+    }
+
+    /**
+     * Registra un cliente vinculado a una empresa específica.
+     * El empresaId llega como parámetro de URL (link de portal generado por el admin).
+     */
+    public AuthResponse registrarCliente(RegisterClienteRequest request, String empresaId) {
+        if (usuarioRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Ya existe un usuario con ese email");
+        }
+        empresaRepository.findById(empresaId)
+                .orElseThrow(() -> new RuntimeException("Empresa no encontrada"));
+
+        Usuario usuario = Usuario.builder()
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .nombre(request.getNombre())
+                .apellido(request.getApellido())
+                .rol(Rol.CLIENTE)
+                .empresaId(empresaId)
+                .build();
+
+        usuario = usuarioRepository.save(usuario);
+        String token = jwtService.generateToken(usuario);
+        return buildAuthResponse(usuario, token);
     }
 
     private List<EmpresaResumen> buildEmpresaResumenes(List<String> empresaIds) {

@@ -24,6 +24,9 @@ public interface TareaRepository extends MongoRepository<TareaInstancia, String>
     // Todas las tareas de un usuario (cualquier estado) — para historial
     List<TareaInstancia> findByAsignadoA(String asignadoA);
 
+    // Todas las tareas de un departamento (cualquier estado) — para filtro SGD
+    List<TareaInstancia> findByDepartamentoId(String departamentoId);
+
     // Tareas de una ejecución en cierto estado (para verificar AND Join)
     List<TareaInstancia> findByInstanciaIdAndEstado(String instanciaId, String estado);
 

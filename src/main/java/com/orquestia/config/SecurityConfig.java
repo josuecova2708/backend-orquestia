@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/health").permitAll()
                 .requestMatchers("/api/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/procesos/publicos").permitAll()
+                .requestMatchers(HttpMethod.GET,  "/api/documentos/*/stream").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/documentos/*/callback").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()

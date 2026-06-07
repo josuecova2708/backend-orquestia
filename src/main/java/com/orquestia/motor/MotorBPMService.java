@@ -66,6 +66,15 @@ public class MotorBPMService {
      */
     public InstanciaProceso iniciarProceso(String procesoId, String usuarioId,
                                            Map<String, Object> variablesIniciales) {
+        return iniciarProceso(procesoId, usuarioId, null, variablesIniciales);
+    }
+
+    /**
+     * Variante con clienteId: usada cuando un CLIENTE inicia el trámite.
+     * @param clienteId userId del cliente dueño del trámite (null si lo inicia un funcionario/admin)
+     */
+    public InstanciaProceso iniciarProceso(String procesoId, String usuarioId, String clienteId,
+                                           Map<String, Object> variablesIniciales) {
         // 1. Cargar la definición del proceso
         Proceso proceso = procesoRepository.findById(procesoId)
                 .orElseThrow(() -> new RuntimeException("Proceso no encontrado: " + procesoId));
@@ -85,6 +94,7 @@ public class MotorBPMService {
                 .empresaId(proceso.getEmpresaId())
                 .creadoPor(usuarioId)
                 .creadoPorNombre(creadoPorNombre)
+                .clienteId(clienteId)
                 .build();
 
         if (variablesIniciales != null) {
@@ -443,9 +453,13 @@ public class MotorBPMService {
             return null;
         }
 
-        String asignadoA = (asignaciones != null && nodo.getDepartamentoId() != null)
-                ? asignaciones.get(nodo.getDepartamentoId())
-                : null;
+        // Si el nodo es de autoservicio, la tarea es del cliente dueño del trámite;
+        // de lo contrario se resuelve el funcionario por la asignación del departamento.
+        String asignadoA = nodo.isResponsableCliente()
+                ? instancia.getClienteId()
+                : (asignaciones != null && nodo.getDepartamentoId() != null)
+                    ? asignaciones.get(nodo.getDepartamentoId())
+                    : null;
 
         TareaInstancia tarea = TareaInstancia.builder()
                 .instanciaId(instancia.getId())

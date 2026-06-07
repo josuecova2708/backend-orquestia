@@ -34,6 +34,14 @@ public class Nodo {
     private String departamentoId;
 
     /**
+     * Si true, esta ACTIVIDAD la realiza el CLIENTE dueño del trámite (autoservicio),
+     * no un funcionario. El motor asigna la tarea al clienteId de la instancia y aparece
+     * en el portal del cliente. Útil para pasos que solo surgen a mitad del flujo
+     * (aceptar condiciones, firmar, agendar, pagar un arancel calculado, etc.).
+     */
+    private boolean responsableCliente;
+
+    /**
      * Formulario dinámico embebido en la actividad.
      * Reemplaza el campo formularioId anterior.
      * Los datos que llena el usuario se convierten en variables de la instancia

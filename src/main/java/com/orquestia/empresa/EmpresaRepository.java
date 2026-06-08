@@ -9,4 +9,6 @@ public interface EmpresaRepository extends MongoRepository<Empresa, String> {
     List<Empresa> findByActiva(boolean activa);
 
     List<Empresa> findByCreadoPor(String userId);
+
+    List<Empresa> findByNombre(String nombre);
 }

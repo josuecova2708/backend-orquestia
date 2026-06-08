@@ -18,4 +18,10 @@ public class MetricaController {
             @RequestParam(required = false) String hasta) {
         return ResponseEntity.ok(metricaService.calcular(empresaId, desde, hasta));
     }
+
+    /** Reporte personalizado a partir de una consulta IA ya estructurada. */
+    @PostMapping("/consulta")
+    public ResponseEntity<ConsultaReporteResponse> consulta(@RequestBody ConsultaReporteRequest request) {
+        return ResponseEntity.ok(metricaService.consulta(request));
+    }
 }

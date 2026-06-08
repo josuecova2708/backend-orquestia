@@ -71,6 +71,14 @@ public class DocumentoService {
             if (esCliente) clienteId = usuarioId;
         }
 
+        // Nombre de la actividad que originó el documento (desnormalizado para mostrar)
+        String tareaLabel = null;
+        if (req.tareaId() != null) {
+            tareaLabel = tareaRepository.findById(req.tareaId())
+                .map(t -> t.getNodoLabel())
+                .orElse(null);
+        }
+
         MinioService.PresignResult presign = minioService.generarPresignedUrlSGD(
             req.empresaId(), req.instanciaId(), req.nombre()
         );
@@ -86,6 +94,7 @@ public class DocumentoService {
             .tareaId(req.tareaId())
             .procesoId(procesoId)
             .clienteId(clienteId)
+            .tareaLabel(tareaLabel)
             .tipo(req.tipo() != null ? req.tipo() : Documento.TipoDocumento.TAREA)
             .creadoPor(usuarioId)
             .creadoPorNombre(usuarioNombre)

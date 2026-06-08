@@ -34,4 +34,11 @@ public class CampoFormulario {
 
     // Solo para tipo OPCIONES: la lista de valores posibles
     private List<String> opciones;
+
+    // Solo para tipo ARCHIVO: extensiones permitidas (ej: [".pdf", ".png"]). Vacío = todo permitido.
+    private List<String> mimeTypesPermitidos;
+
+    // Solo para tipo GRID (tabla NxN fija): encabezados de columna y número de filas
+    private List<String> columnas;
+    private Integer filas;
 }

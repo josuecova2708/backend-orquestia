@@ -46,6 +46,7 @@ public class PrediccionService {
     private final TareaRepository tareaRepository;
     private final UsuarioRepository usuarioRepository;
     private final RestClient iaClient;
+    private final String iaServiceUrl;
 
     public PrediccionService(InstanciaRepository instanciaRepository,
                              TareaRepository tareaRepository,
@@ -54,11 +55,14 @@ public class PrediccionService {
         this.instanciaRepository = instanciaRepository;
         this.tareaRepository = tareaRepository;
         this.usuarioRepository = usuarioRepository;
+        // Guardamos la URL (sin validarla aquí) y la usamos completa en cada request.
+        // Así una URL mal configurada solo falla la predicción (502), no tumba el
+        // arranque del backend completo. .trim() defiende de espacios/saltos de línea.
+        this.iaServiceUrl = iaServiceUrl != null ? iaServiceUrl.trim() : "";
         // Forzamos HTTP/1.1: el HttpClient de Java intenta por defecto un upgrade a
         // HTTP/2 (h2c) que uvicorn no soporta y que hace que se pierda el body (422).
         HttpClient http11 = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
         this.iaClient = RestClient.builder()
-                .baseUrl(iaServiceUrl)
                 .requestFactory(new JdkClientHttpRequestFactory(http11))
                 .build();
     }
@@ -127,7 +131,7 @@ public class PrediccionService {
 
         try {
             return iaClient.post()
-                    .uri("/ia/predecir-instancia")
+                    .uri(iaServiceUrl + "/ia/predecir-instancia")
                     .body(body)
                     .retrieve()
                     .body(Map.class);

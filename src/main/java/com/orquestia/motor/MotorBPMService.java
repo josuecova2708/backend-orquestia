@@ -177,6 +177,9 @@ public class MotorBPMService {
             }
         }
 
+        // Avisar al cliente dueño del trámite que un funcionario avanzó su proceso.
+        notificarClienteAvanzo(instancia, tarea);
+
         if (debeRetornar) {
             log.info("Iniciando ruta de RETORNO manual desde la tarea {}", tarea.getId());
             Nodo destino = findNodo(proceso, conexionRetorno.getDestinoId());
@@ -206,6 +209,7 @@ public class MotorBPMService {
             instancia.setFechaFin(LocalDateTime.now());
             instanciaRepository.save(instancia);
             notificarEmpresa(instancia);
+            notificarClienteFinalizado(instancia);
             log.info("Instancia {} COMPLETADA", instancia.getId());
             return;
         }
@@ -635,5 +639,41 @@ public class MotorBPMService {
                 "instanciaId", instancia.getId(),
                 "estado", instancia.getEstado()
         ));
+    }
+
+    /**
+     * Avisa al cliente dueño del trámite que se completó una actividad.
+     * Solo cuando la completó un FUNCIONARIO (no las acciones de autoservicio del propio cliente).
+     */
+    private void notificarClienteAvanzo(InstanciaProceso instancia, TareaInstancia tareaCompletada) {
+        String clienteId = instancia.getClienteId();
+        if (clienteId == null) return;
+        if (clienteId.equals(tareaCompletada.getAsignadoA())) return; // su propia acción → no notificar
+
+        String label = tareaCompletada.getNodoLabel() != null ? tareaCompletada.getNodoLabel() : "una actividad";
+        Map<String, Object> payload = Map.of(
+                "tipo", "TRAMITE_AVANZO",
+                "instanciaId", instancia.getId(),
+                "nodoLabel", label
+        );
+        ws.convertAndSend("/topic/usuario/" + clienteId, payload);
+        notificacionService.crear(clienteId, "TRAMITE_AVANZO",
+                "Avanzó tu trámite: se completó \"" + label + "\"", payload);
+    }
+
+    /** Avisa al cliente que su trámite finalizó. */
+    private void notificarClienteFinalizado(InstanciaProceso instancia) {
+        String clienteId = instancia.getClienteId();
+        if (clienteId == null) return;
+
+        String nombre = instancia.getProcesoNombre() != null ? instancia.getProcesoNombre() : "tu trámite";
+        Map<String, Object> payload = Map.of(
+                "tipo", "TRAMITE_FINALIZADO",
+                "instanciaId", instancia.getId(),
+                "estado", instancia.getEstado()
+        );
+        ws.convertAndSend("/topic/usuario/" + clienteId, payload);
+        notificacionService.crear(clienteId, "TRAMITE_FINALIZADO",
+                "Tu trámite \"" + nombre + "\" fue completado", payload);
     }
 }

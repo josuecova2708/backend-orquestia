@@ -1,20 +1,29 @@
 package com.orquestia.cliente;
 
+import com.orquestia.auth.Usuario;
+import com.orquestia.auth.UsuarioRepository;
 import com.orquestia.documento.DocumentoService;
 import com.orquestia.instancia.InstanciaProceso;
 import com.orquestia.instancia.InstanciaRepository;
 import com.orquestia.instancia.TareaInstancia;
 import com.orquestia.instancia.TareaRepository;
 import com.orquestia.motor.MotorBPMService;
+import com.orquestia.proceso.CampoFormulario;
 import com.orquestia.proceso.Proceso;
 import com.orquestia.proceso.ProcesoRepository;
 import com.orquestia.proceso.RequisitoDocumento;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Orquesta el inicio de un trámite por parte de un CLIENTE.
@@ -35,6 +44,7 @@ public class ClienteTramiteService {
     private final DocumentoService documentoService;
     private final InstanciaRepository instanciaRepository;
     private final TareaRepository tareaRepository;
+    private final UsuarioRepository usuarioRepository;
 
     /** Trámites iniciados por el cliente, del más reciente al más antiguo. */
     public List<InstanciaProceso> misTramites(String clienteId) {
@@ -51,6 +61,66 @@ public class ClienteTramiteService {
         return tareaRepository.findByAsignadoAAndEstadoIn(
             clienteId, Arrays.asList("PENDIENTE", "EN_PROGRESO"));
     }
+
+    /**
+     * Detalle de UN trámite del cliente, incluyendo cómo cada funcionario llenó los
+     * formularios de cada actividad (como lo ve el admin en Ejecuciones).
+     * Verifica que el trámite le pertenezca al cliente autenticado.
+     */
+    public TramiteDetalleResponse detalle(String clienteId, String instanciaId) {
+        InstanciaProceso inst = instanciaRepository.findById(instanciaId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trámite no encontrado"));
+        if (!clienteId.equals(inst.getClienteId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este trámite no te pertenece");
+        }
+
+        String procesoNombre = inst.getProcesoNombre() != null && !inst.getProcesoNombre().isBlank()
+            ? inst.getProcesoNombre()
+            : procesoRepository.findById(inst.getProcesoId()).map(Proceso::getNombre).orElse(inst.getProcesoId());
+
+        List<TareaInstancia> tareas = tareaRepository.findByInstanciaIdOrderByFechaCreacionAsc(instanciaId);
+
+        // Resolver nombres de los funcionarios que ejecutaron cada tarea
+        Set<String> userIds = tareas.stream()
+            .map(TareaInstancia::getAsignadoA).filter(a -> a != null).collect(Collectors.toSet());
+        Map<String, String> nombres = new HashMap<>();
+        for (Usuario u : usuarioRepository.findAllById(userIds)) {
+            nombres.put(u.getId(), (u.getNombre() + " " + u.getApellido()).trim());
+        }
+
+        List<TareaDetalle> detalles = tareas.stream().map(t -> new TareaDetalle(
+            t.getNodoLabel(),
+            t.getEstado(),
+            t.getAsignadoA() != null ? nombres.getOrDefault(t.getAsignadoA(), "Funcionario") : null,
+            t.getFechaCreacion(),
+            t.getFechaCompletado(),
+            t.getFormularioCampos(),
+            "COMPLETADA".equals(t.getEstado()) ? t.getDatos() : Map.of() // solo mostrar datos de tareas completadas
+        )).toList();
+
+        return new TramiteDetalleResponse(
+            inst.getId(), procesoNombre, inst.getEstado(),
+            inst.getFechaInicio(), inst.getFechaFin(), detalles);
+    }
+
+    public record TramiteDetalleResponse(
+        String id,
+        String procesoNombre,
+        String estado,
+        LocalDateTime fechaInicio,
+        LocalDateTime fechaFin,
+        List<TareaDetalle> tareas
+    ) {}
+
+    public record TareaDetalle(
+        String nodoLabel,
+        String estado,
+        String ejecutadoPor,
+        LocalDateTime fechaCreacion,
+        LocalDateTime fechaCompletado,
+        List<CampoFormulario> formularioCampos,
+        Map<String, Object> datos
+    ) {}
 
     /**
      * El cliente completa una de SUS acciones. Verifica que la tarea le pertenezca

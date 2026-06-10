@@ -34,6 +34,7 @@ public class Documento {
     private String procesoId;   // ID del proceso al que pertenece (null si es corporativo)
     private String clienteId;   // userId del cliente dueño del doc (null si es interno)
     private String tareaLabel;  // nombre de la actividad que originó el documento (si vino de una tarea)
+    private String departamentoId; // depto de la actividad que originó el doc — define quién puede editar por defecto
 
     // ENTRADA     = requisito inicial del proceso
     // TAREA       = subido durante una actividad

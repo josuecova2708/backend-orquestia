@@ -5,7 +5,9 @@ import com.orquestia.instancia.InstanciaRepository;
 import com.orquestia.instancia.TareaRepository;
 import com.orquestia.storage.MinioService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -71,12 +73,16 @@ public class DocumentoService {
             if (esCliente) clienteId = usuarioId;
         }
 
-        // Nombre de la actividad que originó el documento (desnormalizado para mostrar)
+        // Nombre y departamento de la actividad que originó el documento (desnormalizados).
+        // El departamento define quién puede editar el documento por defecto.
         String tareaLabel = null;
+        String departamentoId = null;
         if (req.tareaId() != null) {
-            tareaLabel = tareaRepository.findById(req.tareaId())
-                .map(t -> t.getNodoLabel())
-                .orElse(null);
+            var tarea = tareaRepository.findById(req.tareaId()).orElse(null);
+            if (tarea != null) {
+                tareaLabel = tarea.getNodoLabel();
+                departamentoId = tarea.getDepartamentoId();
+            }
         }
 
         MinioService.PresignResult presign = minioService.generarPresignedUrlSGD(
@@ -95,6 +101,7 @@ public class DocumentoService {
             .procesoId(procesoId)
             .clienteId(clienteId)
             .tareaLabel(tareaLabel)
+            .departamentoId(departamentoId)
             .tipo(req.tipo() != null ? req.tipo() : Documento.TipoDocumento.TAREA)
             .creadoPor(usuarioId)
             .creadoPorNombre(usuarioNombre)
@@ -205,6 +212,10 @@ public class DocumentoService {
         Documento doc = obtener(id);
         String usuarioNombre = resolverNombre(usuarioId);
 
+        // Control de edición server-side: aunque el front pida modo edición, solo se
+        // concede si el usuario está autorizado (admin, su depto, o permiso explícito).
+        boolean soloLecturaEfectivo = soloLectura || !puedeEditar(doc, usuarioId);
+
         // OnlyOffice descarga via proxy del backend — evita problemas de red con MinIO
         String downloadUrl = backendBaseUrl + "/api/documentos/" + id + "/stream";
         String callbackUrl = backendBaseUrl + "/api/documentos/" + id + "/callback";
@@ -223,7 +234,7 @@ public class DocumentoService {
             "title", doc.getNombre(),
             "url", downloadUrl,
             "permissions", Map.of(
-                "edit", !soloLectura,
+                "edit", !soloLecturaEfectivo,
                 "download", true,
                 "print", true
             )
@@ -242,10 +253,10 @@ public class DocumentoService {
 
         Map<String, Object> editorConfig = new HashMap<>();
         editorConfig.put("callbackUrl", callbackUrl);
-        editorConfig.put("mode", soloLectura ? "view" : "edit");
+        editorConfig.put("mode", soloLecturaEfectivo ? "view" : "edit");
         editorConfig.put("lang", "es");
         editorConfig.put("user", userMap);
-        if (!soloLectura) editorConfig.put("customization", customization);
+        if (!soloLecturaEfectivo) editorConfig.put("customization", customization);
 
         // El payload debe contener el config completo — OnlyOffice verifica los tres campos
         Map<String, Object> payload = Map.of(
@@ -259,7 +270,7 @@ public class DocumentoService {
         doc.getAuditLog().add(AuditEntry.builder()
             .usuarioId(usuarioId)
             .usuarioNombre(usuarioNombre)
-            .accion(soloLectura ? "VER" : "EDITAR")
+            .accion(soloLecturaEfectivo ? "VER" : "EDITAR")
             .fecha(Instant.now())
             .detalle("Sesión OnlyOffice iniciada")
             .build());
@@ -307,6 +318,86 @@ public class DocumentoService {
         Documento doc = obtener(id);
         doc.setPermisos(permisos);
         return documentoRepository.save(doc);
+    }
+
+    /**
+     * Decide si un usuario puede EDITAR el documento:
+     *   - es ADMIN de la empresa del documento, o
+     *   - es funcionario del mismo departamento que originó el documento, o
+     *   - tiene un permiso explícito de ESCRITURA/ADMIN concedido por el admin.
+     */
+    public boolean puedeEditar(Documento doc, String usuarioId) {
+        return usuarioRepository.findById(usuarioId).map(u -> {
+            boolean esAdmin = u.getRol() != null && "ADMIN".equals(u.getRol().name())
+                && doc.getEmpresaId() != null
+                && (doc.getEmpresaId().equals(u.getEmpresaId())
+                    || (u.getEmpresasAdmin() != null && u.getEmpresasAdmin().contains(doc.getEmpresaId())));
+            if (esAdmin) return true;
+
+            if (doc.getDepartamentoId() != null && doc.getDepartamentoId().equals(u.getDepartamentoId())) {
+                return true;
+            }
+
+            if (doc.getPermisos() != null) {
+                return doc.getPermisos().stream().anyMatch(p ->
+                    usuarioId.equals(p.getUsuarioId())
+                    && (p.getTipo() == PermisoDocumento.TipoPermiso.ESCRITURA
+                        || p.getTipo() == PermisoDocumento.TipoPermiso.ADMIN));
+            }
+            return false;
+        }).orElse(false);
+    }
+
+    /** El admin concede edición a un funcionario sobre un documento concreto. */
+    public Documento concederEdicion(String id, String usuarioId, String solicitanteId) {
+        Documento doc = obtener(id);
+        verificarAdmin(solicitanteId, doc);
+
+        doc.getPermisos().removeIf(p -> usuarioId.equals(p.getUsuarioId()));
+        doc.getPermisos().add(PermisoDocumento.builder()
+            .usuarioId(usuarioId)
+            .usuarioNombre(resolverNombre(usuarioId))
+            .tipo(PermisoDocumento.TipoPermiso.ESCRITURA)
+            .build());
+        doc.getAuditLog().add(AuditEntry.builder()
+            .usuarioId(solicitanteId)
+            .usuarioNombre(resolverNombre(solicitanteId))
+            .accion("PERMISO_CONCEDIDO")
+            .fecha(Instant.now())
+            .detalle("Edición concedida a " + resolverNombre(usuarioId))
+            .build());
+        return documentoRepository.save(doc);
+    }
+
+    /** El admin revoca la edición concedida a un funcionario. */
+    public Documento revocarEdicion(String id, String usuarioId, String solicitanteId) {
+        Documento doc = obtener(id);
+        verificarAdmin(solicitanteId, doc);
+
+        boolean removido = doc.getPermisos().removeIf(p -> usuarioId.equals(p.getUsuarioId()));
+        if (removido) {
+            doc.getAuditLog().add(AuditEntry.builder()
+                .usuarioId(solicitanteId)
+                .usuarioNombre(resolverNombre(solicitanteId))
+                .accion("PERMISO_REVOCADO")
+                .fecha(Instant.now())
+                .detalle("Edición revocada a " + resolverNombre(usuarioId))
+                .build());
+        }
+        return documentoRepository.save(doc);
+    }
+
+    private void verificarAdmin(String solicitanteId, Documento doc) {
+        boolean esAdmin = usuarioRepository.findById(solicitanteId)
+            .map(u -> u.getRol() != null && "ADMIN".equals(u.getRol().name())
+                && doc.getEmpresaId() != null
+                && (doc.getEmpresaId().equals(u.getEmpresaId())
+                    || (u.getEmpresasAdmin() != null && u.getEmpresasAdmin().contains(doc.getEmpresaId()))))
+            .orElse(false);
+        if (!esAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Solo un administrador de la empresa puede gestionar los permisos del documento");
+        }
     }
 
     // --- Helpers ---

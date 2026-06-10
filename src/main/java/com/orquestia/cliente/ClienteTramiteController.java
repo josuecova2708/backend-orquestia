@@ -53,6 +53,18 @@ public class ClienteTramiteController {
     }
 
     /**
+     * GET /api/cliente/tramites/{id}/detalle
+     * Detalle del trámite con los formularios llenados por cada funcionario.
+     * Solo accesible por el cliente dueño del trámite.
+     */
+    @GetMapping("/tramites/{id}/detalle")
+    public ResponseEntity<ClienteTramiteService.TramiteDetalleResponse> detalleTramite(
+            @PathVariable String id,
+            Authentication auth) {
+        return ResponseEntity.ok(clienteTramiteService.detalle(auth.getName(), id));
+    }
+
+    /**
      * GET /api/cliente/mis-acciones
      * Tareas de autoservicio pendientes asignadas al cliente (aceptar, firmar, etc.).
      */

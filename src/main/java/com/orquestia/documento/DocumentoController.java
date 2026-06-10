@@ -132,4 +132,24 @@ public class DocumentoController {
             @RequestBody List<PermisoDocumento> permisos) {
         return ResponseEntity.ok(documentoService.actualizarPermisos(id, permisos));
     }
+
+    // El admin concede edición a un funcionario sobre este documento
+    @PostMapping("/{id}/permisos/conceder")
+    public ResponseEntity<Documento> concederEdicion(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body,
+            Authentication auth) {
+        return ResponseEntity.ok(
+            documentoService.concederEdicion(id, body.get("usuarioId"), auth.getName()));
+    }
+
+    // El admin revoca la edición concedida a un funcionario
+    @DeleteMapping("/{id}/permisos/{usuarioId}")
+    public ResponseEntity<Documento> revocarEdicion(
+            @PathVariable String id,
+            @PathVariable String usuarioId,
+            Authentication auth) {
+        return ResponseEntity.ok(
+            documentoService.revocarEdicion(id, usuarioId, auth.getName()));
+    }
 }

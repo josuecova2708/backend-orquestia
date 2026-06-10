@@ -477,17 +477,22 @@ public class MotorBPMService {
         TareaInstancia guardada = tareaRepository.save(tarea);
 
         if (asignadoA != null) {
+            // Si el responsable es el CLIENTE (autoservicio), el mensaje es distinto:
+            // no es "una tarea asignada" sino "una acción requerida en tu trámite".
+            boolean esAccionCliente = nodo.isResponsableCliente();
+            String tipo = esAccionCliente ? "ACCION_REQUERIDA" : "TAREA_ASIGNADA";
+            String mensaje = esAccionCliente
+                ? "Acción requerida en tu trámite: " + nodo.getLabel()
+                : "Nueva tarea asignada: " + nodo.getLabel();
+
             Map<String, Object> payload = Map.of(
-                "tipo", "TAREA_ASIGNADA",
+                "tipo", tipo,
                 "tareaId", guardada.getId(),
                 "nodoLabel", nodo.getLabel(),
                 "instanciaId", instancia.getId()
             );
             ws.convertAndSend("/topic/usuario/" + asignadoA, payload);
-            notificacionService.crear(asignadoA, "TAREA_ASIGNADA",
-                "Nueva tarea asignada: " + nodo.getLabel(),
-                payload
-            );
+            notificacionService.crear(asignadoA, tipo, mensaje, payload);
         }
 
         return guardada;

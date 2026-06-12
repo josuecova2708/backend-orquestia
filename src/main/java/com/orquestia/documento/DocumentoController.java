@@ -68,6 +68,15 @@ public class DocumentoController {
         return ResponseEntity.ok(Map.of("url", url));
     }
 
+    // URL temporal de descarga de una versión histórica específica
+    @GetMapping("/{id}/versiones/{version}/descargar")
+    public ResponseEntity<Map<String, String>> descargarVersion(
+            @PathVariable String id,
+            @PathVariable int version) {
+        String url = documentoService.generarUrlDescargaVersion(id, version);
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
     // Config de OnlyOffice para abrir el editor
     @GetMapping("/{id}/editor-config")
     public ResponseEntity<DocumentoService.OnlyOfficeConfig> editorConfig(

@@ -54,6 +54,13 @@ public class Documento {
     private String ultimoEditorId;
     private String ultimoEditorNombre;
 
+    // Versionamiento: número de la versión actual + historial de versiones recuperables
+    @Builder.Default
+    private int version = 1;
+
+    @Builder.Default
+    private List<VersionDocumento> versiones = new ArrayList<>();
+
     @Builder.Default
     private List<PermisoDocumento> permisos = new ArrayList<>();
 

@@ -108,6 +108,15 @@ public class DocumentoService {
             .fechaCreacion(Instant.now())
             .build();
 
+        // Versión 1 = el archivo original recién subido
+        doc.getVersiones().add(VersionDocumento.builder()
+            .version(1)
+            .key(presign.key())
+            .fecha(Instant.now())
+            .editorId(usuarioId)
+            .editorNombre(usuarioNombre)
+            .build());
+
         doc.getAuditLog().add(AuditEntry.builder()
             .usuarioId(usuarioId)
             .usuarioNombre(usuarioNombre)
@@ -291,17 +300,70 @@ public class DocumentoService {
 
             Documento doc = obtener(id);
 
+            // Línea base para documentos antiguos (subidos antes del versionamiento):
+            // su contenido actual queda registrado como versión 1.
+            if (doc.getVersiones() == null) doc.setVersiones(new java.util.ArrayList<>());
+            if (doc.getVersiones().isEmpty()) {
+                doc.getVersiones().add(VersionDocumento.builder()
+                    .version(1).key(doc.getKey()).fecha(doc.getFechaCreacion())
+                    .editorId(doc.getCreadoPor()).editorNombre(doc.getCreadoPorNombre()).build());
+                doc.setVersion(1);
+            }
+
+            // El nuevo guardado NO sobrescribe: se escribe como una versión nueva.
+            int nuevaVersion = doc.getVersion() + 1;
+            String versionKey = "documentos/" + doc.getEmpresaId()
+                + (doc.getInstanciaId() != null ? "/" + doc.getInstanciaId() : "")
+                + "/versiones/v" + nuevaVersion + "-" + UUID.randomUUID() + "-"
+                + doc.getNombre().replaceAll("[^a-zA-Z0-9._-]", "_");
+
             try (InputStream is = URI.create(downloadUrl).toURL().openStream()) {
-                minioService.putObjectFromStream(doc.getKey(), is, doc.getMimeType());
+                minioService.putObjectFromStream(versionKey, is, doc.getMimeType());
             } catch (Exception e) {
                 throw new RuntimeException("Error guardando versión editada desde OnlyOffice: " + e.getMessage(), e);
             }
 
+            // Resolver quién editó (si OnlyOffice lo informa en el callback)
+            String editorId = null;
+            String editorNombre = "Editor";
+            Object usersObj = body.get("users");
+            if (usersObj instanceof List<?> us && !us.isEmpty()) {
+                editorId = String.valueOf(us.get(us.size() - 1));
+                editorNombre = resolverNombre(editorId);
+            }
+
+            doc.getVersiones().add(VersionDocumento.builder()
+                .version(nuevaVersion).key(versionKey).fecha(Instant.now())
+                .editorId(editorId).editorNombre(editorNombre).build());
+            doc.setVersion(nuevaVersion);
+            doc.setKey(versionKey);              // el documento "actual" apunta a la última versión
+            doc.setUltimaEdicion(Instant.now());
+            doc.setUltimoEditorId(editorId);
+            doc.setUltimoEditorNombre(editorNombre);
             // Nueva editorKey para que OnlyOffice no use la caché de la versión anterior
             doc.setEditorKey(UUID.randomUUID().toString().replace("-", "").substring(0, 20));
-            doc.setUltimaEdicion(Instant.now());
+
+            doc.getAuditLog().add(AuditEntry.builder()
+                .usuarioId(editorId)
+                .usuarioNombre(editorNombre)
+                .accion("EDITAR")
+                .fecha(Instant.now())
+                .detalle("Versión " + nuevaVersion + " guardada")
+                .build());
+
             documentoRepository.save(doc);
         }
+    }
+
+    // --- Descarga de una versión específica ---
+
+    public String generarUrlDescargaVersion(String id, int version) {
+        Documento doc = obtener(id);
+        VersionDocumento v = doc.getVersiones().stream()
+            .filter(x -> x.getVersion() == version)
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("Versión no encontrada: " + version));
+        return minioService.generarUrlDescarga(v.getKey());
     }
 
     // --- Eliminar ---
